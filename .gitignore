@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/
+configs/yk-vector-ts.yaml
+*.log
+.DS_Store
+tools/minio

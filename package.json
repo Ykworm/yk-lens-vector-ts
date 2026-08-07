@@ -1,0 +1,36 @@
+{
+  "name": "yk-vector-ts",
+  "version": "1.0.0",
+  "description": "yk-lens 向量服务（TypeScript + LanceDB 官方 SDK）— 契约对齐 yk-vector-go",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test src/**/*.test.ts",
+    "smoke:lance": "tsx src/store/lanceStore.smoke.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "lancedb",
+    "vector",
+    "yk-lens"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1102.0",
+    "@lancedb/lancedb": "^0.33.0",
+    "express": "^5.1.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.2.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}

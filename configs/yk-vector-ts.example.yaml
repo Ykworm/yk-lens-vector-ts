@@ -1,0 +1,55 @@
+# yk-vector-ts 配置示例
+# 复制为 configs/yk-vector-ts.yaml 后用 IDE 打开改即可。
+#
+# 本机推荐：密钥直接写在下面的 api_key（文件已 gitignore，不会进 git）。
+# 环境变量可选、可不用——不是运维也能跑。
+#
+# 端口 :8703；lensd：LENS_VECTOR=http://localhost:8703
+
+addr: ":8703"
+
+lance_path: "data/lance"
+store_backend: "lance" # ts 仅 lance
+vector_index: "ivf_flat" # none = 精确对照
+replace_async: false
+
+# 文搜文
+embedding:
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  # ★ 本机：把 key 粘贴在这里（IDE 里改最省事）
+  api_key: ""
+  model: "qwen3-embedding-0.6b"
+  timeout_sec: 30
+  # 可选：不配 api_key 时才读环境变量（可删掉整行）
+  # api_key_env: "YK_VECTOR_EMBED_API_KEY"
+
+# 跨模态（可与文本共用同一 key：vl.api_key 留空则回落 embedding.api_key）
+# ★ VL 必须用 /api/v1（multimodal-embedding），不要抄 embedding 的 /compatible-mode/v1
+#   MaaS 示例：https://<your-endpoint>.maas.aliyuncs.com/api/v1
+vl:
+  base_url: "https://dashscope.aliyuncs.com/api/v1"
+  api_key: ""
+  model: "qwen3-vl-embedding"
+  timeout_sec: 60
+  max_images: 32
+
+chunk:
+  strategy: "heading_recursive"
+  max_tokens: 512
+  overlap_tokens: 64
+  enrich: true
+  enrich_neighbor_chars: 256
+  enrich_meta: true
+  enrich_max_chars: 4000
+
+# 本机 MinIO（./dev.sh start 可拉起 Docker）；见 docs/13-OBJECT-STORE-MINIO.md
+# 以后换 OSS：改 endpoint / public_base_url / 密钥，force_path_style 常为 false
+object_store:
+  enabled: false
+  endpoint: "http://127.0.0.1:9000"
+  public_base_url: "http://127.0.0.1:9000"
+  region: "us-east-1"
+  bucket: "yk-lens"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  force_path_style: true
