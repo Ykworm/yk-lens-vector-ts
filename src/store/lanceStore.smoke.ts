@@ -8,6 +8,7 @@ import { LanceStore } from "./lanceStore.js";
 import { aggregateByDocId } from "./aggregate.js";
 import type { ChunkRow } from "../types.js";
 import { ModalityText, makeChunkId } from "../types.js";
+import { unixToLocalIso } from "../time.js";
 
 function unit(i: number, dim: number): number[] {
   const v = new Array(dim).fill(0);
@@ -21,6 +22,10 @@ async function main() {
 
   const store = await LanceStore.open(dir, "none");
   const dim = 8;
+  // 固定时刻（unix 秒），经 helper 转本地 RFC3339，保证任意 TZ 下自洽
+  const T_CREATE = 1786363201; // 2026-08-10T20:00:01+08:00
+  const T_UPDATE = 1786363202;
+  const T_INDEX = 1786363203;
   const rows: ChunkRow[] = [
     {
       chunk_id: makeChunkId("docA", 0),
@@ -34,9 +39,9 @@ async function main() {
       modality: ModalityText,
       chunk_index: 0,
       heading_path: "# A",
-      created_at: 1,
-      updated_at: 2,
-      indexed_at: 3,
+      created_at: unixToLocalIso(T_CREATE),
+      updated_at: unixToLocalIso(T_UPDATE),
+      indexed_at: unixToLocalIso(T_INDEX),
     },
     {
       chunk_id: makeChunkId("docB", 0),
@@ -50,9 +55,9 @@ async function main() {
       modality: ModalityText,
       chunk_index: 0,
       heading_path: "# B",
-      created_at: 1,
-      updated_at: 2,
-      indexed_at: 3,
+      created_at: unixToLocalIso(T_CREATE),
+      updated_at: unixToLocalIso(T_UPDATE),
+      indexed_at: unixToLocalIso(T_INDEX),
     },
   ];
   await store.insertRows(rows);
@@ -71,6 +76,19 @@ async function main() {
     hits.map((h) => ({ doc: h.doc_id, score: h.score, snip: h.snippet })),
   );
   if (hits[0]?.doc_id !== "docA") throw new Error(`top want docA got ${hits[0]?.doc_id}`);
+
+  // 时间窗：unix 秒入参 → 定宽字符串下推 Lance SQL；窗口夹到同一秒应命中 2 行
+  const win = await store.searchExact(unit(0, dim), 10, {
+    space: "text",
+    updated_after: T_UPDATE,
+    updated_before: T_UPDATE,
+  });
+  if (win.length !== 2) throw new Error(`时间窗应命中 2 行 got ${win.length}`);
+  const miss = await store.searchExact(unit(0, dim), 10, {
+    space: "text",
+    updated_after: T_UPDATE + 1,
+  });
+  if (miss.length !== 0) throw new Error(`窗口后应命中 0 行 got ${miss.length}`);
 
   const n = await store.deleteByDocId("docA");
   console.log("deleted", n);

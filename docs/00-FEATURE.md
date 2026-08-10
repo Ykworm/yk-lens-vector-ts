@@ -136,7 +136,7 @@ Import / Direct write / From Chat(后置)
 | `path` | 冗余；打开真源 |
 | `chunk_id` | 行主键：`doc_id#i` 或 `doc_id#img#i` |
 | `vector` / `image_vector` | 双空间，禁止混搜 |
-| `created_at` / `updated_at` / `indexed_at` | 三时间字段分行 |
+| `created_at` / `updated_at` / `indexed_at` | 三时间字段分行；**RFC3339 秒级定宽字符串**（本地时区偏移，字典序=时间序；入参仍是 unix 秒，入库边界转换） |
 
 切分：**heading_recursive**（见 02）。聚合：search 默认按 `doc_id` 折叠（B5）。  
 **切分：** 长节 recursiveSplit；叶子 Enrich **已默认开**（±N 邻域 + meta；`text` 仍为切片）。见 [02-CHUNKING-STATUS](02-CHUNKING-STATUS.md)·[15](15-PARENT-CHILD-AND-ENRICH.md)。  

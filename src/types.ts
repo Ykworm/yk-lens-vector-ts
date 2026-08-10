@@ -24,9 +24,10 @@ export interface ChunkRow {
   image_index?: number;
   image_uri?: string;
   heading_path: string;
-  created_at: number;
-  updated_at: number;
-  indexed_at: number;
+  /** 本地时区 RFC3339 秒级定宽字符串（如 2026-08-10T20:02:13+08:00）；"" = 未知。字典序 = 时间序。 */
+  created_at: string;
+  updated_at: string;
+  indexed_at: string;
   /** 合集（Step 19）；空 = 独立笔记 */
   collection_id?: string;
   collection_title?: string;
@@ -47,9 +48,9 @@ export interface SearchHit {
   modality?: string;
   image_index?: number;
   image_uri?: string;
-  created_at: number;
-  updated_at: number;
-  indexed_at: number;
+  created_at: string;
+  updated_at: string;
+  indexed_at: string;
   collection_id?: string;
   collection_title?: string;
   collection_ord?: number;
@@ -57,6 +58,7 @@ export interface SearchHit {
 
 export interface SearchFilter {
   project?: string;
+  /** 对外契约保持 unix 秒；存储侧是字符串，比较前在边界转换（src/time.ts）。 */
   updated_after?: number | null;
   updated_before?: number | null;
   collection_id?: string;

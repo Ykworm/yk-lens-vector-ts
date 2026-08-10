@@ -109,8 +109,8 @@ G. 返回（见第 7 节）
 | `modality` | 固定 `text` | |
 | `chunk_index` | 切分序号 | 从 0 |
 | `heading_path` | 切分 | 章节路径 |
-| `created_at` / `updated_at` | 入参 | |
-| `indexed_at` | 本服务当前时间 | |
+| `created_at` / `updated_at` | 入参（unix 秒） | 存储为 RFC3339 定宽字符串（本地时区） |
+| `indexed_at` | 本服务当前时间 | 同上 |
 
 **禁止**：text 行写 `image_vector`。
 
