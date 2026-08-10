@@ -22,6 +22,7 @@ import {
 } from "../types.js";
 import type { ObjectStore } from "../store/objectStore.js";
 import { JobQueue } from "./jobs.js";
+import { nowLocalIso, unixToLocalIso } from "../time.js";
 
 export interface ReplaceRequest {
   doc_id: string;
@@ -30,6 +31,7 @@ export interface ReplaceRequest {
   project: string;
   title: string;
   content: string;
+  /** 对外契约：unix 秒；入库边界转 RFC3339 字符串（src/time.ts） */
   created_at: number;
   updated_at: number;
   collection_id?: string;
@@ -237,7 +239,7 @@ export class IndexService {
       maxTokens: this.chunkOpts.maxTokens,
       overlapTokens: this.chunkOpts.overlapTokens,
     });
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowLocalIso();
     const rows: ChunkRow[] = [];
     const eopts = this.enrichOpts();
 
@@ -269,8 +271,8 @@ export class IndexService {
         modality: ModalityText,
         chunk_index: p.chunkIndex,
         heading_path: p.headingPath,
-        created_at: req.created_at || 0,
-        updated_at: req.updated_at || 0,
+        created_at: unixToLocalIso(req.created_at),
+        updated_at: unixToLocalIso(req.updated_at),
         indexed_at: now,
         collection_id: req.collection_id || "",
         collection_title: req.collection_title || "",
@@ -320,8 +322,8 @@ export class IndexService {
             chunk_index: 0,
             image_uri: imageUri,
             heading_path: "",
-            created_at: req.created_at || 0,
-            updated_at: req.updated_at || 0,
+            created_at: unixToLocalIso(req.created_at),
+            updated_at: unixToLocalIso(req.updated_at),
             collection_id: req.collection_id || "",
             collection_title: req.collection_title || "",
             collection_ord: req.collection_ord || 0,
@@ -377,6 +379,29 @@ export class IndexService {
   }
 
   /**
+   * 对账：删除 doc_id 不在 valid_doc_ids 白名单里的所有 chunk。
+   * 运维 prune / concept-clear 后清理孤儿用。
+   */
+  async prune(req: { valid_doc_ids: string[] }): Promise<{
+    ok: boolean;
+    pruned: number;
+    docs_removed: number;
+    tables: {
+      text_chunks: { pruned: number; docs_removed: number };
+      image_chunks: { pruned: number; docs_removed: number };
+    };
+  }> {
+    const valid = Array.isArray(req.valid_doc_ids) ? req.valid_doc_ids.filter(Boolean) : [];
+    const tables = await this.store.pruneDocIds(valid);
+    const pruned = tables.text_chunks.pruned + tables.image_chunks.pruned;
+    const docs_removed = tables.text_chunks.docs_removed + tables.image_chunks.docs_removed;
+    console.log(
+      `vector prune: valid=${valid.length} pruned_chunks=${pruned} docs_removed=${docs_removed}`,
+    );
+    return { ok: true, pruned, docs_removed, tables };
+  }
+
+  /**
    * 显式文本入库：单块 text → text_chunks。
    * 同 chunk_id 先删后插；失败直接抛错（不像 MD 附图软忽略）。
    */
@@ -402,7 +427,7 @@ export class IndexService {
     if (!vec.length) throw new Error("embedding 结果为空");
 
     const deleted = await this.store.deleteByChunkId(chunkId, SpaceText);
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowLocalIso();
     await this.store.insertRows([
       {
         chunk_id: chunkId,
@@ -416,8 +441,8 @@ export class IndexService {
         modality: ModalityText,
         chunk_index: chunkIndex,
         heading_path: req.heading_path || "",
-        created_at: req.created_at || 0,
-        updated_at: req.updated_at || 0,
+        created_at: unixToLocalIso(req.created_at),
+        updated_at: unixToLocalIso(req.updated_at),
         indexed_at: now,
       },
     ]);
@@ -462,7 +487,7 @@ export class IndexService {
 
     const imageUri = await this.resolveImageUri(req.doc_id, dataURL);
     const deleted = await this.store.deleteByChunkId(chunkId, SpaceImage);
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowLocalIso();
     await this.store.insertRows([
       {
         chunk_id: chunkId,
@@ -477,8 +502,8 @@ export class IndexService {
         chunk_index: 0,
         image_uri: imageUri,
         heading_path: req.heading_path || "",
-        created_at: req.created_at || 0,
-        updated_at: req.updated_at || 0,
+        created_at: unixToLocalIso(req.created_at),
+        updated_at: unixToLocalIso(req.updated_at),
         indexed_at: now,
       },
     ]);

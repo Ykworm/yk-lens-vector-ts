@@ -132,6 +132,20 @@ export function createApp(svc: IndexService): Express {
     }
   });
 
+  /**
+   * 对账 prune：删除 doc_id 不在 valid_doc_ids 白名单里的所有 chunk。
+   * lensd POST 自身 admin 时，先从 vault 内存索引取 doc_id 白名单再转调此接口。
+   */
+  app.post("/v1/admin/prune", async (req, res, next) => {
+    try {
+      const body = req.body as { valid_doc_ids?: string[] };
+      const result = await svc.prune({ valid_doc_ids: body.valid_doc_ids || [] });
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const msg = err instanceof Error ? err.message : String(err);
     let status = 500;
