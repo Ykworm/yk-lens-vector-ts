@@ -106,7 +106,7 @@ export function createApp(svc: IndexService): Express {
     res.json(j);
   });
 
-  // 只读 Admin：表清单 / 分页扫行（实验台 Browse；npm 起 yk-vector-ts 即有）
+  // 只读 Admin：表清单 / 分页扫行（实验台 Browse；npm 起 yk-lens-vector-ts 即有）
   app.get("/v1/admin/tables", async (_req, res, next) => {
     try {
       const tables = await svc.listTables();

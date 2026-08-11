@@ -1,5 +1,5 @@
 /**
- * yk-vector-ts — 给 lensd 用的向量库服务（chunk + embed + Lance 官方 TS SDK + search）。
+ * yk-lens-vector-ts — 给 lensd 用的向量库服务（chunk + embed + Lance 官方 TS SDK + search）。
  *
  * 边界对齐 yk-vector-go / docs/00-FEATURE.md：
  *   - 只服务 lensd HTTP；Agent/生产前端禁止直连
@@ -21,7 +21,7 @@ import { ObjectStore } from "./store/objectStore.js";
 async function main(): Promise<void> {
   const configPath = process.argv.includes("--config")
     ? process.argv[process.argv.indexOf("--config") + 1]
-    : process.env.YK_VECTOR_CONFIG || "configs/yk-vector-ts.yaml";
+    : process.env.YK_VECTOR_CONFIG || "configs/yk-lens-vector-ts.yaml";
 
   const cfg = loadConfig(configPath);
 
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
   const { host, port } = parseAddr(cfg.addr);
 
   const server = app.listen(port, host, () => {
-    console.log(`yk-vector-ts 监听 ${host}:${port}（仅 lensd 应调用；契约对齐 yk-vector-go）`);
+    console.log(`yk-lens-vector-ts 监听 ${host}:${port}（仅 lensd 应调用；契约对齐 yk-vector-go）`);
   });
 
   const shutdown = async (sig: string) => {

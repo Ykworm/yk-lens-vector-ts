@@ -1,5 +1,5 @@
 {
-  "name": "yk-vector-ts",
+  "name": "yk-lens-vector-ts",
   "version": "1.0.0",
   "description": "yk-lens 向量服务（TypeScript + LanceDB 官方 SDK）— 契约对齐 yk-vector-go",
   "type": "module",

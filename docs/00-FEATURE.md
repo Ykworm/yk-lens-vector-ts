@@ -1,4 +1,4 @@
-# yk-vector-ts — 功能定义（Feature）
+# yk-lens-vector-ts — 功能定义（Feature）
 
 | 项 | 内容 |
 |----|------|
@@ -12,7 +12,7 @@
 
 ## 0. 三句话
 
-1. **yk-vector-ts** 只做一件事：把 **已进 vault 的 L1 笔记** 变成 **可搜的向量**（切分 → embed → Lance）。
+1. **yk-lens-vector-ts** 只做一件事：把 **已进 vault 的 L1 笔记** 变成 **可搜的向量**（切分 → embed → Lance）。
 2. **hybrid 搜索**（关键词 + 向量融合）在 **lensd** 里做，不在本服务。
 3. 主键是稳定 **`doc_id`**；**`content_hash` 只用于去重 / 是否重算**。
 4. 口径是 **测试版可分期**；**禁止「整篇 1 块」当目标切分**。
@@ -48,7 +48,7 @@ lensd 送来一篇笔记正文
 ```
 Import / Direct write / From Chat(后置)
   → 笔记写入 vault L1
-  → lensd :8700 写 Meili + HTTP → yk-vector-ts :8703
+  → lensd :8700 写 Meili + HTTP → yk-lens-vector-ts :8703
   → 搜索：Meili + 本服务 → lensd RRF
 ```
 
@@ -56,7 +56,7 @@ Import / Direct write / From Chat(后置)
 |------|------|------|
 | lensd | 8700 | vault、Meili、hybrid、对外 API |
 | yk-coverto-md | 8701 | PDF/图 → 沙箱 MD |
-| **yk-vector-ts** | **8703** | chunk / embed / Lance / 向量 search |
+| **yk-lens-vector-ts** | **8703** | chunk / embed / Lance / 向量 search |
 | （历史）yk-vector-go | 8702 | Go 实现对等服务；迁移期可并存 |
 
 ---
@@ -95,10 +95,10 @@ Import / Direct write / From Chat(后置)
 
 | 从 | 到 | 允许？ |
 |----|-----|--------|
-| **lensd** | yk-vector-ts | ✅ 唯一生产调用方 |
-| 前端 / Agent | yk-vector-ts | ❌ 生产禁止（Dev 页例外） |
-| yk-vector-ts | embedding API | ✅ 出站 |
-| yk-vector-ts | lensd | ❌ 不回调 |
+| **lensd** | yk-lens-vector-ts | ✅ 唯一生产调用方 |
+| 前端 / Agent | yk-lens-vector-ts | ❌ 生产禁止（Dev 页例外） |
+| yk-lens-vector-ts | embedding API | ✅ 出站 |
+| yk-lens-vector-ts | lensd | ❌ 不回调 |
 
 ---
 

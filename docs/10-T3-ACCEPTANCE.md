@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |----|------|
 | **BACKLOG** | B3-A / B3-B / B3-C |
-| **依赖** | lensd + `LENS_VECTOR=http://localhost:8703`（yk-vector-ts） |
+| **依赖** | lensd + `LENS_VECTOR=http://localhost:8703`（yk-lens-vector-ts） |
 | **闸门代码** | `yk-lens-go`：`ShouldIndexDoc` + `vectorReplace` 双重 L1 |
 | **单测** | `yk-lens-go/internal/memory/t3_paths_test.go`（fake 向量，不依赖真 embedding） |
 
@@ -46,7 +46,7 @@ go test ./internal/memory/ -run 'TestT3_' -v
 缺一不可：
 
 1. `YK_VECTOR_EMBED_API_KEY`（及可用 base_url/model）
-2. `yk-vector-ts` 在 `:8703`（`dev.sh start` 或 `npm run dev`）
+2. `yk-lens-vector-ts` 在 `:8703`（`dev.sh start` 或 `npm run dev`）
 3. `lensd` 在 `:8700` 且 `-vector http://localhost:8703`
 
 ```bash

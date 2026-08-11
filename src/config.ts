@@ -110,7 +110,7 @@ export function defaultConfig(): Config {
 
 export function loadConfig(configPath?: string): Config {
   const cfg = defaultConfig();
-  const p = configPath || process.env.YK_VECTOR_CONFIG || "configs/yk-vector-ts.yaml";
+  const p = configPath || process.env.YK_VECTOR_CONFIG || "configs/yk-lens-vector-ts.yaml";
   if (fs.existsSync(p)) {
     const raw = fs.readFileSync(p, "utf8");
     const y = parseYaml(raw) as Partial<Config> & {

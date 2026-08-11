@@ -1,4 +1,4 @@
-# yk-vector-ts — 目录结构 · Agent 接入（已锁定）
+# yk-lens-vector-ts — 目录结构 · Agent 接入（已锁定）
 
 | 项 | 内容 |
 |----|------|
@@ -18,11 +18,11 @@
 ## 2. 目录树
 
 ```text
-yk-vector-ts/
+yk-lens-vector-ts/
 ├── package.json
 ├── tsconfig.json
 ├── configs/
-│   └── yk-vector-ts.example.yaml
+│   └── yk-lens-vector-ts.example.yaml
 ├── scripts/dev.sh
 ├── docs/                    # 本目录：权威文档
 ├── src/

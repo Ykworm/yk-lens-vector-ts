@@ -1,4 +1,4 @@
-# yk-vector-ts 文档索引
+# yk-lens-vector-ts 文档索引
 
 给人读，也给 AI 代理读。约定：
 
@@ -56,7 +56,7 @@
 ## 给 AI 的硬约束
 
 ```
-- yk-vector-ts is vector-only: chunk + embed + Lance (official TS SDK) + vector search.
+- yk-lens-vector-ts is vector-only: chunk + embed + Lance (official TS SDK) + vector search.
 - Only lensd may call this service over HTTP. No Agent/frontend direct production access.
 - Primary key is doc_id. NEVER use content_hash as identity.
 - index/replace and index/delete key on doc_id.

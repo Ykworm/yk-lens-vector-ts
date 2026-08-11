@@ -4,7 +4,7 @@
 |----|------|
 | **日期** | 2026-08-04 |
 | **入口** | 向量实验台 → **LanceDB Viewer + Searcher**（默认） |
-| **服务** | yk-vector-ts `:8703` · 可选 MinIO `:9000` · lensd hybrid 对照另页 |
+| **服务** | yk-lens-vector-ts `:8703` · 可选 MinIO `:9000` · lensd hybrid 对照另页 |
 | **设计** | [07-MULTIMODAL-VECTOR.md](07-MULTIMODAL-VECTOR.md) · [13-OBJECT-STORE-MINIO.md](13-OBJECT-STORE-MINIO.md) · [09-DEV-TEST-UI.md](09-DEV-TEST-UI.md) |
 
 ---

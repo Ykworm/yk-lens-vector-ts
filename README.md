@@ -1,4 +1,4 @@
-# yk-vector-ts
+# yk-lens-vector-ts
 
 **一句话**：给 lensd 用的 **向量库服务**（TypeScript + **LanceDB 官方 SDK**）——切块、embedding、写入本地 Lance 原生目录、向量搜索。
 
@@ -30,11 +30,11 @@ LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust；Go 仅社区 CGO�
 ## 快速启动
 
 ```bash
-cd yk-vector-ts
+cd yk-lens-vector-ts
 npm install
 
-cp configs/yk-vector-ts.example.yaml configs/yk-vector-ts.yaml
-# 用 IDE 打开 configs/yk-vector-ts.yaml，填 embedding.api_key（及 base_url / model）
+cp configs/yk-lens-vector-ts.example.yaml configs/yk-lens-vector-ts.yaml
+# 用 IDE 打开 configs/yk-lens-vector-ts.yaml，填 embedding.api_key（及 base_url / model）
 # 本机不需要 export 环境变量
 
 npm run dev
@@ -46,10 +46,10 @@ npm run dev
 
 ```bash
 npm run build
-node dist/index.js --config configs/yk-vector-ts.yaml
+node dist/index.js --config configs/yk-lens-vector-ts.yaml
 ```
 
-**密钥**：写在 `configs/yk-vector-ts.yaml` 的 `embedding.api_key`（该文件已 gitignore）。  
+**密钥**：写在 `configs/yk-lens-vector-ts.yaml` 的 `embedding.api_key`（该文件已 gitignore）。  
 环境变量**可选**（覆盖 yaml）；日常用鼠标 / IDE 改 yaml 即可，不必碰 shell。
 
 lensd 切换：
@@ -136,7 +136,7 @@ scripts/dev.sh
 | 逃生 exact/gob | 有 | **无**（只 Lance） |
 | ANN | 进程内 HNSW / CGO 映射 | **锁定 IVF_FLAT + cosine**（[docs/06](docs/06-LANCEDB-USAGE.md)） |
 | 切分 / HTTP / 多模态 | 有 | **对齐** |
-| 文档 | `yk-vector-go/docs` | **`yk-vector-ts/docs`（权威）** |
+| 文档 | `yk-vector-go/docs` | **`yk-lens-vector-ts/docs`（权威）** |
 
 数据目录不要与 go 实例 **同时写同一 `lance_path`**。能否删 go：见 [docs/99-VS-GO-AND-DELETE.md](docs/99-VS-GO-AND-DELETE.md)。
 

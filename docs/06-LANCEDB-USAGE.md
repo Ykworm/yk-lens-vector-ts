@@ -1,4 +1,4 @@
-# yk-vector-ts — LanceDB 使用方案（已锁定）
+# yk-lens-vector-ts — LanceDB 使用方案（已锁定）
 
 | 项 | 内容 |
 |----|------|

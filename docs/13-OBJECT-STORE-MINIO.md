@@ -25,7 +25,7 @@
 | 组件 | 职责 |
 |------|------|
 | **MinIO**（本机 sidecar） | S3 兼容对象存储；默认 API `:9000`，控制台 `:9001` |
-| **yk-vector-ts** | 图入库时可选 **PutObject**；`image_uri` 写 **公网/本机可访问 URL**；embed 仍用字节/data URL |
+| **yk-lens-vector-ts** | 图入库时可选 **PutObject**；`image_uri` 写 **公网/本机可访问 URL**；embed 仍用字节/data URL |
 | **前端实验台** | `<img src={image_uri}>` 当 `http(s)`；不拼磁盘路径 |
 | **以后 OSS** | 换 endpoint / bucket / 密钥；业务字段仍是 `image_uri` |
 | **lensd** | 生产主路径以后可统一上传；本阶段实验台可直打 vector 上传 |
@@ -49,7 +49,7 @@ bucket 策略：本机 dev **公开读**（匿名 GetObject），方便 `<img>` 
 
 ---
 
-## 3. 配置（yk-vector-ts.yaml）
+## 3. 配置（yk-lens-vector-ts.yaml）
 
 ```yaml
 object_store:
@@ -114,7 +114,7 @@ POST /v1/assets/upload
 ./dev.sh status  # 显示 MinIO 端口探活
 ```
 
-启动顺序：优先 **Docker 容器**；无 Docker 时自动下载 **MinIO 官方二进制** 到 `yk-vector-ts/tools/minio` 并后台跑（数据 `yk-vector-ts/data/minio`）。  
+启动顺序：优先 **Docker 容器**；无 Docker 时自动下载 **MinIO 官方二进制** 到 `yk-lens-vector-ts/tools/minio` 并后台跑（数据 `yk-lens-vector-ts/data/minio`）。  
 `object_store.enabled=true` 但 MinIO 未起：vector 启动日志告警，图回落 compact data URL。
 
 ---

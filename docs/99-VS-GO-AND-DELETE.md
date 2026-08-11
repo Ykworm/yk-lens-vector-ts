@@ -27,7 +27,7 @@
 
 | 项 | 状态 |
 |----|------|
-| `dev.sh` 默认 `LENS_VECTOR` / 拉起 | **yk-vector-ts :8703** |
+| `dev.sh` 默认 `LENS_VECTOR` / 拉起 | **yk-lens-vector-ts :8703** |
 | app `/dev-vector` 代理 | **:8703** |
 | Agents.md | 现行 ts；go 标历史 |
 

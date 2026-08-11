@@ -77,8 +77,8 @@ project: inbox
 | **lensd store.Doc** | 结构体 + 扫库/写盘 | P1 |
 | **lensd API** | 列表/详情/搜索过滤/创建合集 | P1～P2 |
 | **Meili** | filterable `collection_id` | P1 |
-| **vectorclient → yk-vector-ts** | replace/search body 透传 | P1 |
-| **yk-vector-ts** | 行模型、filter、Browse | P1 |
+| **vectorclient → yk-lens-vector-ts** | replace/search body 透传 | P1 |
+| **yk-lens-vector-ts** | 行模型、filter、Browse | P1 |
 | **app 前端** | 合集 UI、过滤、实验台 | P2（产品）/ 实验台可先手填 |
 | **Graph / wiki** | 可选：Collection 节点 | P3 |
 | **MCP** | 若暴露检索/写笔记 | P2 |
@@ -92,9 +92,9 @@ project: inbox
 | 文件 | 动作 |
 |------|------|
 | `docs/00-SHARED-IDS.md` | 正式词条 `collection_id` 等 |
-| `yk-vector-ts/docs/16-…`（本文） | 改动面与分期 |
+| `yk-lens-vector-ts/docs/16-…`（本文） | 改动面与分期 |
 | `yk-lens-go/docs/*` | API/Plan 引用 collection 过滤 |
-| `yk-vector-ts/docs/00-FEATURE.md` | 行字段、search filter |
+| `yk-lens-vector-ts/docs/00-FEATURE.md` | 行字段、search filter |
 
 ### 3.2 yk-lens-go（lensd）
 
@@ -116,7 +116,7 @@ project: inbox
 
 **删书：** 需显式「按 collection_id 列出 doc 再逐个 delete」或新 admin 接口（后置）。
 
-### 3.3 yk-vector-ts
+### 3.3 yk-lens-vector-ts
 
 | 区域 | 改动 |
 |------|------|
@@ -176,7 +176,7 @@ Search(collection_id=B):
 | 阶段 | 内容 | 仓库 |
 |------|------|------|
 | **D0** | 词典 + 本文 + FEATURE 引用 | docs ✅ |
-| **D1** | vector-ts 行字段 + search filter + 实验台手填 | yk-vector-ts + app/dev |
+| **D1** | vector-ts 行字段 + search filter + 实验台手填 | yk-lens-vector-ts + app/dev |
 | **D2** | lensd Doc + frontmatter + Meili + vectorclient 透传 | yk-lens-go |
 | **D3** | 产品 UI 合集过滤/分组 | app |
 | **D4** | 合集 CRUD API、导入批量、Graph | 后置 |

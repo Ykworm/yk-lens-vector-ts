@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# yk-vector-ts 开发启停
+# yk-lens-vector-ts 开发启停
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-PID_FILE="$ROOT/data/yk-vector-ts.pid"
-LOG_FILE="$ROOT/data/yk-vector-ts.log"
+PID_FILE="$ROOT/data/yk-lens-vector-ts.pid"
+LOG_FILE="$ROOT/data/yk-lens-vector-ts.log"
 mkdir -p "$ROOT/data"
 
 cmd="${1:-}"
@@ -14,11 +14,11 @@ case "$cmd" in
       echo "already running pid=$(cat "$PID_FILE")"
       exit 0
     fi
-    if [ ! -f configs/yk-vector-ts.yaml ] && [ -f configs/yk-vector-ts.example.yaml ]; then
-      cp configs/yk-vector-ts.example.yaml configs/yk-vector-ts.yaml
-      echo "created configs/yk-vector-ts.yaml from example"
+    if [ ! -f configs/yk-lens-vector-ts.yaml ] && [ -f configs/yk-lens-vector-ts.example.yaml ]; then
+      cp configs/yk-lens-vector-ts.example.yaml configs/yk-lens-vector-ts.yaml
+      echo "created configs/yk-lens-vector-ts.yaml from example"
     fi
-    nohup npx tsx src/index.ts --config configs/yk-vector-ts.yaml >>"$LOG_FILE" 2>&1 &
+    nohup npx tsx src/index.ts --config configs/yk-lens-vector-ts.yaml >>"$LOG_FILE" 2>&1 &
     echo $! >"$PID_FILE"
     echo "started pid=$! log=$LOG_FILE"
     ;;

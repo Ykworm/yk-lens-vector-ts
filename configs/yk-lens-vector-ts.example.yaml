@@ -1,5 +1,5 @@
-# yk-vector-ts 配置示例
-# 复制为 configs/yk-vector-ts.yaml 后用 IDE 打开改即可。
+# yk-lens-vector-ts 配置示例
+# 复制为 configs/yk-lens-vector-ts.yaml 后用 IDE 打开改即可。
 #
 # 本机推荐：密钥直接写在下面的 api_key（文件已 gitignore，不会进 git）。
 # 环境变量可选、可不用——不是运维也能跑。

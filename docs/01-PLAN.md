@@ -1,4 +1,4 @@
-# yk-vector-ts — 实现计划
+# yk-lens-vector-ts — 实现计划
 
 | 项 | 内容 |
 |----|------|
@@ -10,7 +10,7 @@
 
 ## 0. 目标
 
-独立进程 **yk-vector-ts**：切分 + 向量检索 + 接 lensd hybrid；Lance 用 **官方 TS SDK**。
+独立进程 **yk-lens-vector-ts**：切分 + 向量检索 + 接 lensd hybrid；Lance 用 **官方 TS SDK**。
 
 ---
 

@@ -16,7 +16,7 @@
 | **Health / hybrid** | `GET /healthz` · lensd hybrid 对照（非 Lance 直连） |
 
 代理：Vite `/dev-vector` → **`http://localhost:8703`**。  
-启动：仓库根 `./dev.sh start`（含 MinIO 可选）或 `yk-vector-ts` 下 `npm run dev`。
+启动：仓库根 `./dev.sh start`（含 MinIO 可选）或 `yk-lens-vector-ts` 下 `npm run dev`。
 
 产品「检索」页（lensd hybrid）**不**承担图搜图；多模态验收只在实验台。
 
@@ -65,7 +65,7 @@ doc_id：雪花十进制（`app/src/dev/snowflake.ts`，对齐 lensd idgen）。
 
 | 项 | 说明 |
 |----|------|
-| **结论** | **不用 Docker 起 lance-data-viewer**；Admin 在 yk-vector-ts |
+| **结论** | **不用 Docker 起 lance-data-viewer**；Admin 在 yk-lens-vector-ts |
 | **API** | `GET /v1/admin/tables` · `GET /v1/admin/rows`（支持 `order_by` + `order`） |
 
 ---
