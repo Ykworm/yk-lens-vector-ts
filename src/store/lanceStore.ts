@@ -74,6 +74,7 @@ export class LanceStore {
       this.imageDim = await inferVectorDim(this.imageTbl, "image_vector");
       this.imageIndexed = await hasVectorIndex(this.imageTbl, "image_vector");
       await ensureCollectionColumns(this.imageTbl, TABLE_IMAGE);
+      await ensureFileHashColumn(this.imageTbl, TABLE_IMAGE);
       await assertStringTimeColumns(this.imageTbl, TABLE_IMAGE);
     }
     this.openFlag = true;
@@ -301,6 +302,83 @@ export class LanceStore {
     });
   }
 
+  /**
+   * 只删 text_chunks 中该 doc 的全部行（image 幂等对齐时保留 image 表，T4）。
+   */
+  async deleteTextByDocId(docId: string): Promise<number> {
+    return this.withLock(async () => {
+      if (!this.textTbl) return 0;
+      const filter = `doc_id = '${escapeSql(docId)}'`;
+      const before = await this.textTbl.countRows(filter);
+      if (before === 0) return 0;
+      try {
+        await this.textTbl.delete(filter);
+      } catch (e) {
+        console.warn(`lance delete text ${docId}:`, e);
+        return 0;
+      }
+      return before;
+    });
+  }
+
+  /**
+   * 该 doc 已入库 image 的 file_hash 集合（一次查询；空 file_hash 的旧行不计入，
+   * 下次 replace 视为未入库重嵌一次）。T4 幂等对齐用。
+   */
+  async imageFileHashes(docId: string): Promise<Set<string>> {
+    return this.withLock(async () => {
+      const out = new Set<string>();
+      if (!this.imageTbl) return out;
+      try {
+        const rows = await this.imageTbl
+          .query()
+          .where(`doc_id = '${escapeSql(docId)}'`)
+          .select(["file_hash"])
+          .toArray();
+        for (const r of rows) if (r.file_hash) out.add(String(r.file_hash));
+      } catch (e) {
+        console.warn(`lance imageFileHashes ${docId}:`, e);
+      }
+      return out;
+    });
+  }
+
+  /**
+   * 删除该 doc 中「file_hash 不在 keep 集合」的 image 行（md 不再引用的图 + 旧空 hash 行）。
+   * 一次查询 + 一次 delete（IN 过滤），不在热路径 foreach。返回删除行数。
+   */
+  async deleteImagesNotIn(docId: string, keep: Set<string>): Promise<number> {
+    return this.withLock(async () => {
+      if (!this.imageTbl) return 0;
+      const filter = `doc_id = '${escapeSql(docId)}'`;
+      let rows: Record<string, unknown>[];
+      try {
+        rows = await this.imageTbl
+          .query()
+          .where(filter)
+          .select(["chunk_id", "file_hash"])
+          .toArray();
+      } catch (e) {
+        console.warn(`lance deleteImagesNotIn query ${docId}:`, e);
+        return 0;
+      }
+      const stale = rows
+        .filter((r) => !keep.has(String(r.file_hash || "")))
+        .map((r) => String(r.chunk_id));
+      if (stale.length === 0) return 0;
+      const before = await this.imageTbl.countRows(filter);
+      const inList = stale.map((c) => `'${escapeSql(c)}'`).join(",");
+      try {
+        await this.imageTbl.delete(`${filter} AND chunk_id IN (${inList})`);
+      } catch (e) {
+        console.warn(`lance deleteImagesNotIn ${docId}:`, e);
+        return 0;
+      }
+      const after = await this.imageTbl.countRows(filter);
+      return before - after;
+    });
+  }
+
   async insertRows(rows: ChunkRow[]): Promise<void> {
     if (rows.length === 0) return;
     return this.withLock(async () => {
@@ -341,6 +419,7 @@ export class LanceStore {
             throw new Error(`lance: image dim mismatch want=${this.imageDim} got=${dim}`);
           }
           await ensureCollectionColumns(this.imageTbl, TABLE_IMAGE);
+          await ensureFileHashColumn(this.imageTbl, TABLE_IMAGE);
           await this.imageTbl.add(recs);
         }
         await this.maybeIndex(this.imageTbl, "image_vector", "image");
@@ -698,6 +777,21 @@ async function ensureCollectionColumns(tbl: lancedb.Table, label: string): Promi
 }
 
 /**
+ * T4 幂等对齐：image_chunks 缺 file_hash 列时补列（旧行默认 ""，下次 replace 对账后重嵌一次）。
+ */
+async function ensureFileHashColumn(tbl: lancedb.Table, label: string): Promise<void> {
+  try {
+    const schema = await tbl.schema();
+    if (schema.fields.some((f) => f.name === "file_hash")) return;
+    await tbl.addColumns([{ name: "file_hash", valueSql: "cast('' as string)" }]);
+    console.log(`lance schema migrate ${label}: +file_hash`);
+  } catch (e) {
+    console.warn(`lance ensureFileHashColumn ${label}:`, e);
+    throw e;
+  }
+}
+
+/**
  * 2026-08-10 起 created_at / updated_at / indexed_at 改为 RFC3339 字符串（人类可读）。
  * 旧 int64 库无法原地改列类型，这里 fail-fast 给明确指引，而不是等 insert 报隐晦的类型错。
  */
@@ -777,6 +871,7 @@ function toImageRecord(r: ChunkRow): Record<string, unknown> {
     collection_id: r.collection_id || "",
     collection_title: r.collection_title || "",
     collection_ord: r.collection_ord ?? 0,
+    file_hash: r.file_hash || "",
   };
 }
 

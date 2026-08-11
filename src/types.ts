@@ -32,6 +32,13 @@ export interface ChunkRow {
   collection_id?: string;
   collection_title?: string;
   collection_ord?: number;
+  /** image 文件本体 hash（sha256 hex，仅 image 行）；T4 幂等对齐用，text 行无 */
+  file_hash?: string;
+}
+
+/** 内容字节 sha256 hex（T4：image 幂等对齐的稳定标识，不随引用 URL 变化） */
+export function sha256Hex(data: Buffer | string): string {
+  return createHash("sha256").update(data).digest("hex");
 }
 
 export interface SearchHit {

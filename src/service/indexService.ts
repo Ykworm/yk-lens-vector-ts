@@ -19,6 +19,7 @@ import {
   compactImageUri,
   makeChunkId,
   makeImageChunkIdFromKey,
+  sha256Hex,
 } from "../types.js";
 import type { ObjectStore } from "../store/objectStore.js";
 import { JobQueue } from "./jobs.js";
@@ -52,6 +53,8 @@ export interface ReplaceResult {
   text_chunks?: number;
   /** 成功写入的图像行数 */
   image_chunks?: number;
+  /** 幂等对齐跳过的图像数（file_hash 已入库，未调 VL embed） */
+  image_skipped?: number;
   /** 抽到的附图数（含失败） */
   images_found?: number;
   /** 附图 embed/入库失败摘要（不拖垮整篇） */
@@ -94,6 +97,8 @@ export interface UpsertImageRequest {
   image_data_url?: string;
   /** 可选稳定键；默认用 data URL / base64 指纹 */
   image_key?: string;
+  /** image 文件本体 sha256 hex（T4 幂等对齐；缺省按字节算） */
+  file_hash?: string;
   created_at?: number;
   updated_at?: number;
 }
@@ -233,7 +238,15 @@ export class IndexService {
   async replaceSync(req: ReplaceRequest): Promise<ReplaceResult> {
     if (!this.embed.configured()) throw ErrNotConfigured;
 
-    await this.store.deleteByDocId(req.doc_id);
+    // T4 image 幂等对齐：
+    // - remove_and_insert（运维 vector/reindex）→ 维持整篇先删后建（修复用，强制全量）；
+    // - 常规 replace → 只删 text，image 按 file_hash 对账，已入库的跳过 VL embed（不重复调 API）。
+    const forceRebuild = Boolean(req.remove_and_insert);
+    if (forceRebuild) {
+      await this.store.deleteByDocId(req.doc_id);
+    } else {
+      await this.store.deleteTextByDocId(req.doc_id);
+    }
 
     const { body, pieces } = splitHeadingRecursive(req.content, {
       maxTokens: this.chunkOpts.maxTokens,
@@ -282,6 +295,7 @@ export class IndexService {
 
     let imagesFound = 0;
     let imageChunks = 0;
+    let imageSkipped = 0;
     const imageErrors: string[] = [];
     const textChunks = rows.length;
 
@@ -289,6 +303,12 @@ export class IndexService {
       const maxImg = this.maxImagesPerDoc > 0 ? this.maxImagesPerDoc : 32;
       const refs = extractImages(req.content, maxImg);
       imagesFound = refs.length;
+      // 一次查询该 doc 已入库 image 的 file_hash 集合（不逐 chunk 判断，T4）
+      let existingHashes: Set<string> | null = null;
+      if (!forceRebuild && refs.length > 0) {
+        existingHashes = await this.store.imageFileHashes(req.doc_id);
+      }
+      const refHashes = new Set<string>(); // 本次 md 引用的全部 file_hash（清理依据）
       for (const ref of refs) {
         const shortUri = ref.uri.length > 64 ? `${ref.uri.slice(0, 64)}…` : ref.uri;
         try {
@@ -297,6 +317,15 @@ export class IndexService {
             continue;
           }
           const fetched = await fetchImage(ref);
+          const fileHash = fetched.bytes?.length
+            ? sha256Hex(fetched.bytes)
+            : sha256Hex(fetched.uri);
+          refHashes.add(fileHash);
+          // 已入库（T4 导入或上次管线）且本次非强制重建 → 跳过 VL embed，保留旧行
+          if (existingHashes && existingHashes.has(fileHash)) {
+            imageSkipped++;
+            continue;
+          }
           let iv: number[];
           if (fetched.bytes?.length) {
             iv = await this.vl.embedImage(fetched.bytes, fetched.mime || "image/png");
@@ -328,12 +357,20 @@ export class IndexService {
             collection_title: req.collection_title || "",
             collection_ord: req.collection_ord || 0,
             indexed_at: now,
+            file_hash: fileHash,
           });
           imageChunks++;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           imageErrors.push(`${shortUri}: ${msg}`);
           console.warn(`skip image ${shortUri} (doc ${req.doc_id}):`, e);
+        }
+      }
+      // 清理：md 不再引用的图 + 旧空 file_hash 行（forceRebuild 已全删，无需再清）
+      if (!forceRebuild) {
+        const pruned = await this.store.deleteImagesNotIn(req.doc_id, refHashes);
+        if (pruned > 0) {
+          console.log(`replace doc=${req.doc_id}: 清理未引用 image ${pruned} 行`);
         }
       }
     } else if (extractImages(req.content, 1).length > 0) {
@@ -347,6 +384,7 @@ export class IndexService {
         chunks: 0,
         text_chunks: 0,
         image_chunks: 0,
+        image_skipped: imageSkipped,
         images_found: imagesFound,
         image_errors: imageErrors.length ? imageErrors : undefined,
         status: "done",
@@ -359,6 +397,7 @@ export class IndexService {
       chunks: rows.length,
       text_chunks: textChunks,
       image_chunks: imageChunks,
+      image_skipped: imageSkipped,
       images_found: imagesFound,
       image_errors: imageErrors.length ? imageErrors : undefined,
       status: "done",
@@ -484,6 +523,8 @@ export class IndexService {
     const chunkId = makeImageChunkIdFromKey(req.doc_id, key);
     const iv = await this.vl.embedImageDataURL(dataURL);
     if (!iv.length) throw new Error("vl embedding 结果为空");
+    // T4 幂等对齐：file_hash = image 文件本体 sha256（缺省按字节算，与 lensd 传入一致）
+    const fileHash = req.file_hash || sha256Hex(dataURLBytes(dataURL));
 
     const imageUri = await this.resolveImageUri(req.doc_id, dataURL);
     const deleted = await this.store.deleteByChunkId(chunkId, SpaceImage);
@@ -505,6 +546,7 @@ export class IndexService {
         created_at: unixToLocalIso(req.created_at),
         updated_at: unixToLocalIso(req.updated_at),
         indexed_at: now,
+        file_hash: fileHash,
       },
     ]);
     return {
@@ -682,4 +724,10 @@ function isRelativeImageUri(uri: string): boolean {
   if (u.startsWith("data:")) return false;
   if (u.startsWith("http://") || u.startsWith("https://")) return false;
   return true;
+}
+
+/** data URL → 原始字节（file_hash 缺省计算用） */
+function dataURLBytes(dataURL: string): Buffer {
+  const comma = dataURL.indexOf(",");
+  return Buffer.from(dataURL.slice(comma + 1), "base64");
 }
