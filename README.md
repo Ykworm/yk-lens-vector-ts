@@ -3,7 +3,12 @@
        alt="yk-lens-vector-ts：yk-lens 的向量服务，把 L1 笔记切块、embedding 后写入 Lance 原生目录，提供文本与图像双空间的向量搜索">
 </p>
 
-**yk-lens-vector-ts** 是 yk-lens 的向量服务（TypeScript + **LanceDB 官方 SDK**）：把 vault 里的正式笔记（内部简称 **L1**，与沙箱草稿、聊天记录区分）变成可搜的向量——`heading_recursive` 切块 → Qwen3 embedding → 写入本地 Lance 原生目录 → 提供向量搜索 HTTP。契约与历史 [`yk-vector-go`](../yk-vector-go/) 对齐，可替换使用。
+<p align="center">
+  <img src="https://img.shields.io/badge/status-active-brightgreen" alt="status: active">
+  <img src="https://img.shields.io/badge/version-1.0.0-007ec6" alt="version 1.0.0">
+</p>
+
+**yk-lens-vector-ts** 是 yk-lens 的向量服务（TypeScript + **LanceDB 官方 SDK**）：把 vault 里的正式笔记（内部简称 **L1**，与沙箱草稿、聊天记录区分）变成可搜的向量——`heading_recursive` 切块 → Qwen3 embedding → 写入本地 Lance 原生目录 → 提供向量搜索 HTTP。
 
 | 要点 | 说明 |
 |------|------|
@@ -12,6 +17,25 @@
 | 存储 | Lance 本地目录；**启动只 Open，不 re-embed** |
 | ANN | **IVF_FLAT + cosine**；文本 / 图像双空间，各自索引 |
 | 不做 | 持 vault、写 Meili、hybrid/RRF——都在 lensd 一侧完成 |
+
+---
+
+## 背景：为什么存在
+
+笔记不断积累，关键词只能命中字面相同的片段，搜不到「语义相近」的内容。本服务把每篇笔记切成块、embedding 成向量写入 Lance，让相似语义的片段也能被检索到；笔记附带的图像走同一套存储做跨模态搜索（文搜图 / 图搜图）。
+
+---
+
+## 数据模型
+
+两张 Lance 表、双空间双索引：
+
+| 表 | 向量列 | 标量索引 | 用途 |
+|----|--------|----------|------|
+| `text_chunks` | `vector` | `doc_id` / `project` / `updated_at` | 文搜文 |
+| `image_chunks` | `image_vector` | 同上 | 文搜图 / 图搜图 |
+
+行主键 `chunk_id` = `doc_id#i`（图像行 `doc_id#img#i`）；三时间字段 `created_at` / `updated_at` / `indexed_at` 分行，RFC3339 秒级定宽。表结构细节见 [docs/06](docs/06-LANCEDB-USAGE.md)。
 
 ---
 
@@ -69,11 +93,13 @@ export LENS_VECTOR=http://localhost:8703
 
 ## HTTP 契约
 
+接口分两类：**业务 API**（`/v1/index` · `/v1/search` · `/v1/jobs` · `/v1/assets`，供上游服务调用）与**管理 API**（`/v1/admin`，只读 + 对账，供运维 / 实验台）。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/healthz` | lance / embedding / vl / chunks / ann |
 | `POST` | `/v1/index/replace` | 按 `doc_id` 整篇替换（hash skip；`async`→202） |
-| `POST` | `/v1/index/delete` | 按 `doc_id` 删光（幂等） |
+| `POST` | `/v1/index/delete` | 按 `doc_id` 删除该篇全部向量行（文本+图像）；不存在也返回成功 |
 | `POST` | `/v1/index/rename` | 只改 path/title，不重 embed |
 | `POST` | `/v1/search` | 文搜文 / 文搜图 / 图搜图 |
 | `GET` | `/v1/jobs/:id` | 异步 replace 任务 |
@@ -118,7 +144,7 @@ Search `mode`：
 
 ## 为什么是 TS + Lance
 
-LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust；Go 仅社区 CGO。本服务用 `@lancedb/lancedb` 直接读写 **Lance 原生文件**，避免预编译 CGO 与社区绑定风险。
+LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust。本服务用 `@lancedb/lancedb` 直接读写 **Lance 原生文件**，避免社区绑定与预编译 CGO 风险。
 
 **为什么存储选 Lance（不只是向量）：**
 
@@ -126,16 +152,7 @@ LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust；Go 仅社区 CGO�
 - **为「图」留路**：Lance 生态的 [lance-graph](https://github.com/lance-format/lance-graph) 让同一份 Lance 数据可直接做 Cypher 属性图遍历——向量检索与知识图谱检索未来共用一套存储，不另起炉灶
 - **开放列式格式**：数据是可移植的 Lance 文件，Python / Rust 生态可以直接读同一份数据
 
-| 项 | go（历史） | ts（本仓） |
-|----|------------|------------|
-| Lance 访问 | 社区 CGO `lancedb-go` | **官方** `@lancedb/lancedb` |
-| 默认端口 | 8702 | **8703** |
-| 逃生 exact/gob | 有 | **无**（只 Lance） |
-| ANN | 进程内 HNSW / CGO 映射 | **锁定 IVF_FLAT + cosine**（[docs/06](docs/06-LANCEDB-USAGE.md)） |
-| 切分 / HTTP / 多模态 | 有 | **对齐** |
-| 文档 | `yk-vector-go/docs` | **`yk-lens-vector-ts/docs`（权威）** |
-
-> 数据目录不要与 go 实例**同时写同一 `lance_path`**。能否删 go：见 [docs/99-VS-GO-AND-DELETE.md](docs/99-VS-GO-AND-DELETE.md)。
+实现要点：只写 Lance 原生格式；ANN 锁定 **IVF_FLAT + cosine**（[docs/06](docs/06-LANCEDB-USAGE.md)）；切分 / HTTP / 多模态按上游约定对齐。
 
 ---
 
@@ -161,8 +178,47 @@ scripts/dev.sh
 
 ---
 
+## 测试
+
+```bash
+npm run test:unit      # node:test：切块 / indexService
+npm run smoke:lance    # Lance round-trip 冒烟
+npm run typecheck
+```
+
+---
+
+## 现状
+
+- **阶段**：yk-lens 桌面阶段现行服务；供上游（lensd）调用，前端 / Agent 一律不直连。
+- **版本**：1.0.0（Node ≥ 20）。
+- **启动**：仓库根 `./dev.sh start|status|stop` 一键起停（或本仓 `./scripts/dev.sh start`）。
+- **端口**：`:8703`，与 yk-lens 其它服务并列——lensd `:8700` · coverto `:8701` · graph `:8702`。
+- **数据**：Lance 目录默认 `data/lance`（配置 `lance_path`）；本进程独占数据目录，禁止第二个进程打开同一目录。
+
+---
+
+## Roadmap
+
+后端与产品演进见 [docs/03-BACKLOG.md](docs/03-BACKLOG.md)（勾选清单）；延后运维项（异步队列、对象存储、reindex 流程）见 [docs/11-DEFERRED-OPS.md](docs/11-DEFERRED-OPS.md)。
+
+---
+
+## 已知注意点
+
+- **异步 replace 是内存队列**：进程重启任务丢失（见 docs/11）。
+- **进程独占 `lance_path`**：禁止两个进程同时打开同一 Lance 目录。
+- **`@lancedb/lancedb` 较新**：升级需谨慎，改动后跑 `smoke:lance` + 手工搜索验证。
+
+---
+
 ## 文档
 
 - 本仓 [`docs/`](docs/)（权威，以 [`03-BACKLOG.md`](docs/03-BACKLOG.md) 勾选）
 - 根词典 [`docs/00-SHARED-IDS.md`](../docs/00-SHARED-IDS.md)
-- 历史 go 文档：`yk-vector-go/docs/`（迁移期保留）
+
+---
+
+## License
+
+UNLICENSED（未授权；yk-lens 内部组件）。
