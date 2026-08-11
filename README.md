@@ -1,29 +1,33 @@
-# yk-lens-vector-ts
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%"
+       alt="yk-lens-vector-ts：yk-lens 的向量服务，把 L1 笔记切块、embedding 后写入 Lance 原生目录，提供文本与图像双空间的向量搜索">
+</p>
 
-**一句话**：给 lensd 用的 **向量库服务**（TypeScript + **LanceDB 官方 SDK**）——切块、embedding、写入本地 Lance 原生目录、向量搜索。
-
-HTTP 契约与 [`yk-vector-go`](../yk-vector-go/) **对齐**，可替换使用。
-
----
-
-## 为什么是 TS
-
-LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust；Go 仅社区 CGO。  
-本服务用 `@lancedb/lancedb` 直接读写 **Lance 原生文件**，避免预编译 CGO 与社区绑定风险。
-
----
-
-## 先记住
+**yk-lens-vector-ts** 是 yk-lens 的向量服务（TypeScript + **LanceDB 官方 SDK**）：把 vault 里的正式笔记（内部简称 **L1**，与沙箱草稿、聊天记录区分）变成可搜的向量——`heading_recursive` 切块 → Qwen3 embedding → 写入本地 Lance 原生目录 → 提供向量搜索 HTTP。契约与历史 [`yk-vector-go`](../yk-vector-go/) 对齐，可替换使用。
 
 | 要点 | 说明 |
 |------|------|
-| 默认端口 | **`:8703`**（go 版 `:8702`；可用 `YK_VECTOR_ADDR` 改成 8702 做切换） |
-| 谁可以调 | **只有 lensd**（HTTP）。前端 / Agent **禁止**直连 |
-| 真源 | Markdown 在 vault，由 lensd 管；本服务 **不持 vault** |
-| 主键 | **`doc_id`**（稳定 ID）。`content_hash` 仅指纹 / skip |
-| 存储 | Lance 本地目录（`lance_path`）；启动只 Open，不 re-embed |
-| ANN | **IVF_FLAT + cosine**（配置 `ivf_flat`）；文本/图像表各自索引 |
-| 权威文档 | [`docs/`](docs/)（以 [`03-BACKLOG.md`](docs/03-BACKLOG.md) 勾选） |
+| 端口 | HTTP **`:8703`**；由上游服务调用（前端 / Agent 禁止直连） |
+| 主键 | 稳定 **`doc_id`**；`content_hash` 仅做指纹 / 是否重算（skip） |
+| 存储 | Lance 本地目录；**启动只 Open，不 re-embed** |
+| ANN | **IVF_FLAT + cosine**；文本 / 图像双空间，各自索引 |
+| 不做 | 持 vault、写 Meili、hybrid/RRF——都在 lensd 一侧完成 |
+
+---
+
+## 怎么工作
+
+```
+正式笔记写入 vault → 上游服务触发 replace → 切块 → embedding → Lance → 向量搜索
+```
+
+<p align="center">
+  <img src="./assets/readme/pipeline.svg" width="100%"
+       alt="工作机制：lensd 写入成功后触发 replace，heading_recursive 切块，qwen3-embedding 生成文本与图像双空间向量，写入 LanceDB，IVF_FLAT + cosine 向量搜索">
+</p>
+
+- 同一 `doc_id` 且请求里的 `content_hash` 与库内一致 → **跳过**，不重复切分 / 调 embedding / 写库（返回 `skipped: true`）。换模型或重排索引时，由上游服务（如 lensd）reindex 时用 `remove_and_insert` 强制重算。
+- 搜索的 hybrid（关键词 + 向量融合 / RRF）在上游服务（如 lensd）做，本服务只出向量侧结果。
 
 ---
 
@@ -35,11 +39,17 @@ npm install
 
 cp configs/yk-lens-vector-ts.example.yaml configs/yk-lens-vector-ts.yaml
 # 用 IDE 打开 configs/yk-lens-vector-ts.yaml，填 embedding.api_key（及 base_url / model）
-# 本机不需要 export 环境变量
+# 本机不需要 export 环境变量（文件已 gitignore）
 
-npm run dev
+npm run dev            # 开发
 # 或
-./scripts/dev.sh start
+./scripts/dev.sh start # 走脚本
+```
+
+验证：
+
+```bash
+curl -s localhost:8703/healthz
 ```
 
 生产构建：
@@ -49,10 +59,7 @@ npm run build
 node dist/index.js --config configs/yk-lens-vector-ts.yaml
 ```
 
-**密钥**：写在 `configs/yk-lens-vector-ts.yaml` 的 `embedding.api_key`（该文件已 gitignore）。  
-环境变量**可选**（覆盖 yaml）；日常用鼠标 / IDE 改 yaml 即可，不必碰 shell。
-
-lensd 切换：
+接入上游（示例：yk-lens 的 lensd 指向本服务）：
 
 ```bash
 export LENS_VECTOR=http://localhost:8703
@@ -60,7 +67,7 @@ export LENS_VECTOR=http://localhost:8703
 
 ---
 
-## HTTP（与 go 相同）
+## HTTP 契约
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -73,9 +80,9 @@ export LENS_VECTOR=http://localhost:8703
 | `GET` | `/v1/admin/tables` | 只读：表清单（rows / dim / indexed） |
 | `GET` | `/v1/admin/rows` | 只读：分页扫行（`table` `limit` `offset` `doc_id` `order_by` `order` `group_by=doc_id`） |
 
-```bash
-curl -s localhost:8703/healthz
+写入一篇笔记：
 
+```bash
 curl -s -X POST localhost:8703/v1/index/replace -H 'Content-Type: application/json' -d '{
   "doc_id": "01HQEXAMPLE",
   "path": "inbox/notes/foo.md",
@@ -86,7 +93,11 @@ curl -s -X POST localhost:8703/v1/index/replace -H 'Content-Type: application/js
   "created_at": 1720000000,
   "updated_at": 1720001000
 }'
+```
 
+向量搜索：
+
+```bash
 curl -s -X POST localhost:8703/v1/search -H 'Content-Type: application/json' -d '{
   "query": "混合检索",
   "limit": 20,
@@ -105,7 +116,30 @@ Search `mode`：
 
 ---
 
-## 目录
+## 为什么是 TS + Lance
+
+LanceDB **官方一等 SDK** 含 Python / TypeScript / Rust；Go 仅社区 CGO。本服务用 `@lancedb/lancedb` 直接读写 **Lance 原生文件**，避免预编译 CGO 与社区绑定风险。
+
+**为什么存储选 Lance（不只是向量）：**
+
+- **多模态同一存储**：文本向量与图像向量共存在 Lance 表里、各自建索引（`text_vector` / `image_vector`），文搜图 / 图搜图不需要第二套库
+- **为「图」留路**：Lance 生态的 [lance-graph](https://github.com/lance-format/lance-graph) 让同一份 Lance 数据可直接做 Cypher 属性图遍历——向量检索与知识图谱检索未来共用一套存储，不另起炉灶
+- **开放列式格式**：数据是可移植的 Lance 文件，Python / Rust 生态可以直接读同一份数据
+
+| 项 | go（历史） | ts（本仓） |
+|----|------------|------------|
+| Lance 访问 | 社区 CGO `lancedb-go` | **官方** `@lancedb/lancedb` |
+| 默认端口 | 8702 | **8703** |
+| 逃生 exact/gob | 有 | **无**（只 Lance） |
+| ANN | 进程内 HNSW / CGO 映射 | **锁定 IVF_FLAT + cosine**（[docs/06](docs/06-LANCEDB-USAGE.md)） |
+| 切分 / HTTP / 多模态 | 有 | **对齐** |
+| 文档 | `yk-vector-go/docs` | **`yk-lens-vector-ts/docs`（权威）** |
+
+> 数据目录不要与 go 实例**同时写同一 `lance_path`**。能否删 go：见 [docs/99-VS-GO-AND-DELETE.md](docs/99-VS-GO-AND-DELETE.md)。
+
+---
+
+## 代码结构
 
 ```text
 src/
@@ -127,23 +161,8 @@ scripts/dev.sh
 
 ---
 
-## 与 yk-vector-go 对照
+## 文档
 
-| 项 | go | ts（本仓） |
-|----|----|------------|
-| Lance 访问 | 社区 CGO `lancedb-go` | **官方** `@lancedb/lancedb` |
-| 默认端口 | 8702 | **8703** |
-| 逃生 exact/gob | 有 | **无**（只 Lance） |
-| ANN | 进程内 HNSW / CGO 映射 | **锁定 IVF_FLAT + cosine**（[docs/06](docs/06-LANCEDB-USAGE.md)） |
-| 切分 / HTTP / 多模态 | 有 | **对齐** |
-| 文档 | `yk-vector-go/docs` | **`yk-lens-vector-ts/docs`（权威）** |
-
-数据目录不要与 go 实例 **同时写同一 `lance_path`**。能否删 go：见 [docs/99-VS-GO-AND-DELETE.md](docs/99-VS-GO-AND-DELETE.md)。
-
----
-
-## 设计权威
-
-- 本仓 [`docs/`](docs/)（优先）
+- 本仓 [`docs/`](docs/)（权威，以 [`03-BACKLOG.md`](docs/03-BACKLOG.md) 勾选）
 - 根词典 [`docs/00-SHARED-IDS.md`](../docs/00-SHARED-IDS.md)
 - 历史 go 文档：`yk-vector-go/docs/`（迁移期保留）
