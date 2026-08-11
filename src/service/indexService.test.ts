@@ -55,7 +55,7 @@ async function setup() {
     res.end(PNG);
   });
   await new Promise<void>((r) => server.listen(0, r));
-  const url = `http://127.0.0.1:${(server.address() as http.AddressInfo).port}/img.png`;
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/img.png`;
 
   const req = (contentHash: string, content: string, removeAndInsert = false): ReplaceRequest => ({
     doc_id: "doc1",
