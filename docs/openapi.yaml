@@ -1,0 +1,651 @@
+openapi: 3.0.3
+info:
+  title: yk-lens-vector-ts
+  description: |
+    yk-lens 向量服务（TypeScript + LanceDB 官方 SDK）：把笔记切块、embedding 后写入
+    本地 Lance 原生目录，提供向量搜索 HTTP。业务 API 供上游服务（如 lensd）调用；
+    管理 API（/v1/admin）只读 + 对账，供运维 / 实验台。
+
+    人类可读文档见 docs/http-api.md。
+  version: 1.0.0
+servers:
+  - url: http://localhost:8703
+    description: 本地默认地址（LENS_VECTOR）
+tags:
+  - name: health
+    description: 健康检查
+  - name: index
+    description: 文档向量索引（replace / delete / rename / upsert）
+  - name: search
+    description: 向量搜索
+  - name: jobs
+    description: 异步 replace 任务
+  - name: assets
+    description: 图像对象存储上传
+  - name: admin
+    description: 管理（只读 + 对账）
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: 健康检查
+      description: lance / embedding / vl / chunks / ann / object_store 状态。
+      responses:
+        "200":
+          description: 服务正常（lance open）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthzResponse" }
+        "503":
+          description: lance 未打开（closed）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthzResponse" }
+
+  /v1/index/replace:
+    post:
+      tags: [index]
+      summary: 按 doc_id 整篇替换
+      description: |
+        切块 → embed → 先删后建。content_hash 与库内一致则跳过（skipped: true）。
+        async: true 时入内存队列，立即返回 202 + job_id；false 时同步执行。
+        换模型 / 重排索引用 remove_and_insert: true 强制重算。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceRequest" }
+      responses:
+        "200":
+          description: 同步完成（或 hash skip）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplaceResult" }
+        "202":
+          description: "已入异步队列（async: true）"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplaceResult" }
+        "400":
+          description: 参数缺失
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: embedding 未配置
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/index/upsert_text:
+    post:
+      tags: [index]
+      summary: 显式文本块入库（测试用）
+      description: 直接写入一条文本块，不做切分；失败直接 4xx/5xx，不软忽略。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertTextRequest" }
+      responses:
+        "200":
+          description: 写入成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpsertResult" }
+        "400":
+          description: 参数缺失
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/index/upsert_image:
+    post:
+      tags: [index]
+      summary: 显式图像入库（测试用）
+      description: |
+        写入一条图像向量行（VL embed）。可选先上传对象存储后 image_uri 为 HTTP URL。
+        失败直接 4xx/5xx。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertImageRequest" }
+      responses:
+        "200":
+          description: 写入成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpsertResult" }
+        "400":
+          description: 参数缺失 / vl 未配置
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/assets/upload:
+    post:
+      tags: [assets]
+      summary: 只上传图像到对象存储
+      description: 只传图到 MinIO/OSS，返回可预览 URL；不写 Lance。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UploadAssetRequest" }
+      responses:
+        "200":
+          description: 上传成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UploadResult" }
+        "400":
+          description: image_base64 / image_data_url 必填
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: object_store 未启用
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/index/delete:
+    post:
+      tags: [index]
+      summary: 按 doc_id 删除
+      description: "删除该 doc_id 的全部向量行（text_chunks + image_chunks）；不存在也返回成功（deleted: 0）。"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doc_id]
+              properties:
+                doc_id:
+                  type: string
+                  description: 稳定主键
+      responses:
+        "200":
+          description: 删除完成
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeleteResult" }
+        "400":
+          description: doc_id 必填
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/index/rename:
+    post:
+      tags: [index]
+      summary: 重命名
+      description: 只改 path / title，不重 embed。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameRequest" }
+      responses:
+        "200":
+          description: 更新完成
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenameResult" }
+        "400":
+          description: doc_id 必填
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/search:
+    post:
+      tags: [search]
+      summary: 向量搜索
+      description: |
+        mode: text（文搜文，默认）/ text_to_image（文搜图）/ image_to_image（图搜图）。
+        默认按 doc_id 聚合（aggregate: true）。limit 默认 50，上限 200。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SearchRequest" }
+      responses:
+        "200":
+          description: 检索结果
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResponse" }
+        "400":
+          description: query 必填 / 未知 mode / vl 未配置
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: embedding 未配置
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/jobs/{id}:
+    get:
+      tags: [jobs]
+      summary: 查询异步 replace 任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 任务状态
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "404":
+          description: job 不存在
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: 异步队列未启用（replace_async=false 未配置队列）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/admin/tables:
+    get:
+      tags: [admin]
+      summary: 只读表清单
+      description: rows / vector_column / vector_dim / vector_indexed。
+      responses:
+        "200":
+          description: 表清单
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TablesResponse" }
+
+  /v1/admin/rows:
+    get:
+      tags: [admin]
+      summary: 只读分页扫行
+      parameters:
+        - name: table
+          in: query
+          required: false
+          schema: { type: string, default: text_chunks }
+          description: text_chunks | image_chunks
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0 }
+        - name: doc_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: order_by
+          in: query
+          required: false
+          schema: { type: string }
+          description: 标量列名（不能按向量列排序）
+        - name: order
+          in: query
+          required: false
+          schema: { type: string, enum: [asc, desc] }
+        - name: group_by
+          in: query
+          required: false
+          schema: { type: string, default: doc_id }
+      responses:
+        "200":
+          description: 分页行
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RowsResponse" }
+        "400":
+          description: 未知表 / 非法 order_by / group_by / 按向量列排序
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /v1/admin/prune:
+    post:
+      tags: [admin]
+      summary: 对账清理孤儿
+      description: 删除 doc_id 不在 valid_doc_ids 白名单里的所有行（text + image）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PruneRequest" }
+      responses:
+        "200":
+          description: 清理完成
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PruneResponse" }
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [ok, error]
+      properties:
+        ok:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+
+    HealthzResponse:
+      type: object
+      required: [ok, lance, embedding, vl, chunks]
+      properties:
+        ok:
+          type: boolean
+        lance:
+          type: string
+          enum: [open, closed]
+        embedding:
+          type: boolean
+        vl:
+          type: boolean
+        chunks:
+          type: integer
+        ann:
+          type: string
+          enum: [ivf_flat, none]
+        object_store:
+          type: boolean
+
+    ReplaceRequest:
+      type: object
+      required: [doc_id, path, content_hash, project, title, content, created_at, updated_at]
+      properties:
+        doc_id: { type: string }
+        path: { type: string, description: vault 相对路径 }
+        content_hash: { type: string, description: 全文指纹；skip 判断用 }
+        project: { type: string }
+        title: { type: string }
+        content: { type: string, description: Markdown 正文（含 frontmatter 约定范围） }
+        created_at: { type: integer, description: unix 秒；入库边界转 RFC3339 字符串 }
+        updated_at: { type: integer, description: unix 秒 }
+        collection_id: { type: string, description: 合集 ID（可选） }
+        collection_title: { type: string }
+        collection_ord: { type: integer }
+        remove_and_insert:
+          type: boolean
+          description: true = 忽略 hash skip，先删后建整篇重建
+        async:
+          type: boolean
+          description: true = 入内存队列异步执行（立即返回 202）
+
+    ReplaceResult:
+      type: object
+      required: [ok, doc_id, chunks]
+      properties:
+        ok: { type: boolean }
+        skipped: { type: boolean }
+        reason: { type: string, description: 如 content_hash unchanged }
+        doc_id: { type: string }
+        chunks: { type: integer, description: 写入的总行数 }
+        text_chunks: { type: integer }
+        image_chunks: { type: integer }
+        image_skipped: { type: integer, description: file_hash 已入库跳过 VL embed 的图数 }
+        images_found: { type: integer, description: 抽到的附图数（含失败） }
+        image_errors:
+          type: array
+          items: { type: string }
+        job_id: { type: string, description: async 时返回 }
+        status: { type: string, description: async 时为 queued }
+
+    UpsertTextRequest:
+      type: object
+      required: [doc_id, text]
+      properties:
+        doc_id: { type: string }
+        text: { type: string }
+        path: { type: string }
+        project: { type: string }
+        title: { type: string }
+        content_hash: { type: string }
+        chunk_index: { type: integer }
+        heading_path: { type: string }
+        created_at: { type: integer, description: unix 秒 }
+        updated_at: { type: integer, description: unix 秒 }
+
+    UpsertImageRequest:
+      type: object
+      required: [doc_id]
+      properties:
+        doc_id: { type: string }
+        path: { type: string }
+        project: { type: string }
+        title: { type: string }
+        content_hash: { type: string }
+        alt: { type: string }
+        heading_path: { type: string }
+        image_base64: { type: string, description: 裸 base64 或 data URL }
+        image_mime: { type: string, default: image/png }
+        image_data_url: { type: string }
+        image_key:
+          type: string
+          description: 可选稳定键；默认用 data URL / base64 指纹
+        file_hash:
+          type: string
+          description: 图像文件本体 sha256 hex（T4 幂等对齐；缺省按字节算）
+        created_at: { type: integer }
+        updated_at: { type: integer }
+
+    UpsertResult:
+      type: object
+      required: [ok, doc_id, chunk_id, modality, replaced, status]
+      properties:
+        ok: { type: boolean }
+        doc_id: { type: string }
+        chunk_id: { type: string }
+        modality:
+          type: string
+          enum: [text, image]
+        replaced: { type: boolean }
+        status: { type: string }
+        image_uri:
+          type: string
+          description: 图：可预览 URL（MinIO/OSS）或压碎后的 data 指纹
+
+    UploadAssetRequest:
+      type: object
+      properties:
+        doc_id: { type: string, default: upload }
+        image_base64: { type: string }
+        image_mime: { type: string, default: image/png }
+        image_data_url: { type: string }
+
+    UploadResult:
+      type: object
+      required: [ok, url, key, bucket]
+      properties:
+        ok: { type: boolean }
+        url: { type: string, description: 公网 / 本机可访问 URL }
+        key: { type: string }
+        bucket: { type: string }
+
+    RenameRequest:
+      type: object
+      required: [doc_id]
+      properties:
+        doc_id: { type: string }
+        path: { type: string }
+        title: { type: string }
+
+    RenameResult:
+      type: object
+      required: [ok, doc_id, updated]
+      properties:
+        ok: { type: boolean }
+        doc_id: { type: string }
+        updated: { type: integer, description: 更新的行数 }
+
+    DeleteResult:
+      type: object
+      required: [ok, doc_id, deleted]
+      properties:
+        ok: { type: boolean }
+        doc_id: { type: string }
+        deleted: { type: integer, description: 删除的行数（不存在为 0） }
+
+    SearchRequest:
+      type: object
+      properties:
+        query: { type: string, description: 文搜文 / 文搜图时的文本查询 }
+        limit:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 200
+        project: { type: string }
+        updated_after: { type: integer, nullable: true, description: unix 秒 }
+        updated_before: { type: integer, nullable: true, description: unix 秒 }
+        collection_id: { type: string }
+        aggregate:
+          type: boolean
+          default: true
+          description: 默认按 doc_id 折叠
+        mode:
+          type: string
+          enum: [text, text_to_image, image_to_image, text_to_text]
+          default: text
+        image_base64: { type: string, description: 图搜图时提供 }
+        image_mime: { type: string, default: image/png }
+        image_data_url: { type: string }
+
+    SearchHit:
+      type: object
+      required: [doc_id, path, content_hash, chunk_id, chunk_index, score, snippet, title, project, created_at, updated_at, indexed_at]
+      properties:
+        doc_id: { type: string }
+        path: { type: string }
+        content_hash: { type: string }
+        chunk_id: { type: string }
+        chunk_index: { type: integer }
+        score: { type: number, format: float, description: cosine 相似度 }
+        snippet: { type: string }
+        title: { type: string }
+        project: { type: string }
+        heading_path: { type: string }
+        modality: { type: string, enum: [text, image] }
+        image_index: { type: integer }
+        image_uri: { type: string }
+        created_at: { type: string, description: RFC3339 秒级定宽 }
+        updated_at: { type: string }
+        indexed_at: { type: string }
+        collection_id: { type: string }
+        collection_title: { type: string }
+        collection_ord: { type: integer }
+
+    SearchResponse:
+      type: object
+      required: [hits, total, aggregated, mode]
+      properties:
+        hits:
+          type: array
+          items: { $ref: "#/components/schemas/SearchHit" }
+        total: { type: integer }
+        aggregated: { type: boolean }
+        mode: { type: string }
+
+    Job:
+      type: object
+      required: [job_id, kind, doc_id, status, created_at, updated_at]
+      properties:
+        job_id: { type: string, example: job_1 }
+        kind:
+          type: string
+          enum: [replace]
+        doc_id: { type: string }
+        status:
+          type: string
+          enum: [queued, running, done, failed, skipped]
+        error: { type: string }
+        chunks: { type: integer }
+        skipped: { type: boolean }
+        created_at: { type: integer, description: unix 秒 }
+        updated_at: { type: integer, description: unix 秒 }
+
+    TableInfo:
+      type: object
+      required: [name, rows, vector_column, vector_dim, vector_indexed]
+      properties:
+        name:
+          type: string
+          enum: [text_chunks, image_chunks]
+        rows: { type: integer }
+        vector_column: { type: string, description: vector | image_vector }
+        vector_dim: { type: integer }
+        vector_indexed: { type: boolean }
+
+    TablesResponse:
+      type: object
+      required: [ok, tables]
+      properties:
+        ok: { type: boolean }
+        tables:
+          type: array
+          items: { $ref: "#/components/schemas/TableInfo" }
+
+    RowsResponse:
+      type: object
+      required: [ok, table, total, offset, limit, order_by, order, group_by, rows]
+      properties:
+        ok: { type: boolean }
+        table: { type: string }
+        total: { type: integer }
+        offset: { type: integer }
+        limit: { type: integer }
+        order_by: { type: string }
+        order: { type: string, enum: [asc, desc] }
+        group_by: { type: string }
+        scan_capped: { type: boolean, description: 扫描达到上限被截断 }
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    PruneRequest:
+      type: object
+      required: [valid_doc_ids]
+      properties:
+        valid_doc_ids:
+          type: array
+          items: { type: string }
+          description: doc_id 白名单；不在名单内的行全部删除
+
+    PruneResponse:
+      type: object
+      required: [ok, pruned, docs_removed, tables]
+      properties:
+        ok: { type: boolean }
+        pruned: { type: integer }
+        docs_removed: { type: integer }
+        tables:
+          type: object
+          properties:
+            text_chunks:
+              $ref: "#/components/schemas/PruneTableStat"
+            image_chunks:
+              $ref: "#/components/schemas/PruneTableStat"
+
+    PruneTableStat:
+      type: object
+      required: [pruned, docs_removed]
+      properties:
+        pruned: { type: integer }
+        docs_removed: { type: integer }

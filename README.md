@@ -93,6 +93,11 @@ export LENS_VECTOR=http://localhost:8703
 
 ## HTTP 契约
 
+📚 **完整 API 文档 → [docs/http-api.md](docs/http-api.md)** · 📜 **OpenAPI 规范 → [docs/openapi.yaml](docs/openapi.yaml)**
+
+- **人类阅读**（http-api.md）：数据模型 / 12 个端点逐一示例与字段表 / 最小工作流 / 错误处理 / 运维注意。
+- **机器消费**（openapi.yaml）：OpenAPI 3.0.3 契约，可直接生成客户端或喂给 coding agent。
+
 接口分两类：**业务 API**（`/v1/index` · `/v1/search` · `/v1/jobs` · `/v1/assets`，供上游服务调用）与**管理 API**（`/v1/admin`，只读 + 对账，供运维 / 实验台）。
 
 | 方法 | 路径 | 说明 |
